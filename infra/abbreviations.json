@@ -1,0 +1,14 @@
+{
+  "cognitiveServicesAIServices": "ais-",
+  "cognitiveServicesProjects": "aiproj-",
+  "insightsComponents": "appi-",
+  "insightsDce": "dce-",
+  "insightsDcr": "dcr-",
+  "insightsWorkbooks": "wb-",
+  "keyVaultVaults": "kv-",
+  "operationalInsightsWorkspaces": "log-",
+  "resourcesResourceGroups": "rg-",
+  "storageStorageAccounts": "st",
+  "webServerFarms": "asp-",
+  "webSitesFunctions": "func-"
+}

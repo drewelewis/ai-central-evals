@@ -1,0 +1,497 @@
+{
+  "version": "Notebook/1.0",
+  "isLocked": false,
+  "fallbackResourceIds": ["azure monitor"],
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# AI Foundry — Nightly Safety & Quality Evals\n_Central dashboard for all Foundry project safety and quality evaluation results. Use the filters above to scope by time range, project, or target type._"
+      },
+      "name": "header"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "a1b2c3d4-0001-0001-0001-000000000001",
+            "version": "KqlParameterItem/1.0",
+            "name": "TimeRange",
+            "label": "Time Range",
+            "type": 4,
+            "isRequired": true,
+            "value": { "durationMs": 604800000 },
+            "typeSettings": {
+              "selectableValues": [
+                { "durationMs": 3600000 },
+                { "durationMs": 86400000 },
+                { "durationMs": 259200000 },
+                { "durationMs": 604800000 },
+                { "durationMs": 2592000000 }
+              ],
+              "allowCustom": true
+            }
+          },
+          {
+            "id": "a1b2c3d4-0001-0001-0001-000000000002",
+            "version": "KqlParameterItem/1.0",
+            "name": "Project",
+            "label": "Project",
+            "type": 2,
+            "isRequired": false,
+            "multiSelect": true,
+            "quote": "'",
+            "delimiter": ",",
+            "query": "FoundryEvals_CL | summarize by FoundryProjectName_s | sort by FoundryProjectName_s asc",
+            "value": ["value::all"],
+            "typeSettings": {
+              "additionalResourceOptions": ["value::all"],
+              "showDefault": false
+            },
+            "queryType": 0,
+            "resourceType": "microsoft.operationalinsights/workspaces"
+          },
+          {
+            "id": "a1b2c3d4-0001-0001-0001-000000000003",
+            "version": "KqlParameterItem/1.0",
+            "name": "TargetType",
+            "label": "Target Type",
+            "type": 2,
+            "isRequired": false,
+            "multiSelect": true,
+            "quote": "'",
+            "delimiter": ",",
+            "query": "FoundryEvals_CL | summarize by TargetType_s | sort by TargetType_s asc",
+            "value": ["value::all"],
+            "typeSettings": {
+              "additionalResourceOptions": ["value::all"],
+              "showDefault": false
+            },
+            "queryType": 0,
+            "resourceType": "microsoft.operationalinsights/workspaces"
+          },
+          {
+            "id": "a1b2c3d4-0001-0001-0001-000000000004",
+            "version": "KqlParameterItem/1.0",
+            "name": "Target",
+            "label": "Target",
+            "type": 2,
+            "isRequired": false,
+            "multiSelect": true,
+            "quote": "'",
+            "delimiter": ",",
+            "query": "FoundryEvals_CL\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\n| summarize by TargetName_s\n| sort by TargetName_s asc",
+            "value": ["value::all"],
+            "typeSettings": {
+              "additionalResourceOptions": ["value::all"],
+              "showDefault": false
+            },
+            "queryType": 0,
+            "resourceType": "microsoft.operationalinsights/workspaces"
+          }
+        ],
+        "style": "above",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces"
+      },
+      "name": "parameters"
+    },
+
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "FoundryEvals_CL\n| where TimeGenerated {TimeRange}\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\n| summarize EvalRuns = dcount(EvalRunId_s), Targets = dcount(strcat(FoundryProjectName_s, '|', TargetName_s)), ChecksRun = count(), ChecksPassed = countif(Passed_b == true), PassRate = round(100.0 * countif(Passed_b == true) / count(), 1)\n| project rows = pack_array(\n    pack('Metric', 'Eval Runs', 'Value', toreal(EvalRuns)),\n    pack('Metric', 'Targets Evaluated', 'Value', toreal(Targets)),\n    pack('Metric', 'Checks Run', 'Value', toreal(ChecksRun)),\n    pack('Metric', 'Checks Passed', 'Value', toreal(ChecksPassed)),\n    pack('Metric', 'Overall Pass Rate %', 'Value', PassRate))\n| mv-expand rows\n| project Metric = tostring(rows['Metric']), Value = toreal(rows['Value'])",
+        "size": 4,
+        "title": "Summary",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "tiles",
+        "tileSettings": {
+          "showBorder": false,
+          "titleContent": { "columnMatch": "Metric", "formatter": 1 },
+          "leftContent": { "columnMatch": "Value", "formatter": 12, "formatOptions": { "palette": "auto" } }
+        }
+      },
+      "name": "kpi-tiles"
+    },
+
+    {
+      "type": 1,
+      "content": { "json": "## 📈 Pass Rate Trends" },
+      "name": "section-trends"
+    },
+
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "FoundryEvals_CL\n| where TimeGenerated {TimeRange}\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\n| summarize PassRate = round(100.0 * countif(Passed_b == true) / count(), 1) by bin(TimeGenerated, 1d), EvaluatorName_s\n| order by TimeGenerated asc",
+        "size": 0,
+        "title": "Pass Rate Over Time — by Evaluator",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "timechart",
+        "chartSettings": {
+          "seriesAggregation": 4,
+          "ySettings": {
+            "numberFormatSettings": { "unit": 1, "options": { "style": "decimal", "maximumFractionDigits": 1 } },
+            "min": 0,
+            "max": 100
+          }
+        }
+      },
+      "customWidth": "60",
+      "name": "chart-passrate-time"
+    },
+
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "FoundryEvals_CL\n| where TimeGenerated {TimeRange}\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\n| summarize PassRate = round(100.0 * countif(Passed_b == true) / count(), 1), Checks = count() by EvaluatorName_s\n| order by PassRate asc",
+        "size": 3,
+        "title": "Pass Rate — by Evaluator",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "barchart",
+        "chartSettings": {
+          "xAxis": "EvaluatorName_s",
+          "yAxis": ["PassRate"],
+          "ySettings": { "min": 0, "max": 100 }
+        }
+      },
+      "customWidth": "40",
+      "name": "chart-passrate-evaluator"
+    },
+
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "FoundryEvals_CL\n| where TimeGenerated {TimeRange}\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\n| summarize PassRate = round(100.0 * countif(Passed_b == true) / count(), 1), Checks = count() by FoundryProjectName_s\n| order by PassRate asc",
+        "size": 0,
+        "title": "Pass Rate — by Project",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "barchart",
+        "chartSettings": {
+          "xAxis": "FoundryProjectName_s",
+          "yAxis": ["PassRate"],
+          "ySettings": { "min": 0, "max": 100 }
+        }
+      },
+      "customWidth": "50",
+      "name": "chart-passrate-project"
+    },
+
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "FoundryEvals_CL\n| where TimeGenerated {TimeRange}\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\n| summarize AvgScore = round(avg(Score_d), 3), PassRate = round(100.0 * countif(Passed_b == true) / count(), 1) by TargetType_s, EvaluatorName_s\n| order by TargetType_s asc, EvaluatorName_s asc",
+        "size": 3,
+        "title": "Agent vs Model — Score by Evaluator",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "barchart",
+        "chartSettings": {
+          "xAxis": "EvaluatorName_s",
+          "yAxis": ["AvgScore"],
+          "splitBy": "TargetType_s",
+          "ySettings": { "min": 0, "max": 1 }
+        }
+      },
+      "customWidth": "50",
+      "name": "chart-agent-vs-model"
+    },
+
+    {
+      "type": 1,
+      "content": { "json": "## 📊 Scores & Performance" },
+      "name": "section-scores"
+    },
+
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "FoundryEvals_CL\n| where TimeGenerated {TimeRange}\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\n| summarize AvgScore = round(avg(Score_d), 3) by bin(TimeGenerated, 1d), EvaluatorCategory_s\n| order by TimeGenerated asc",
+        "size": 0,
+        "title": "Average Score Over Time — by Category",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "timechart",
+        "chartSettings": {
+          "ySettings": { "min": 0, "max": 1 }
+        }
+      },
+      "customWidth": "60",
+      "name": "chart-score-time"
+    },
+
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "FoundryEvals_CL\n| where TimeGenerated {TimeRange}\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\n| summarize\n    AvgDurationSec = round(avg(DurationMs_d) / 1000, 1),\n    MaxDurationSec = round(max(DurationMs_d) / 1000, 1),\n    Runs = count()\n  by EvaluatorName_s\n| order by AvgDurationSec desc",
+        "size": 3,
+        "title": "Evaluator Duration (seconds)",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "barchart",
+        "chartSettings": {
+          "xAxis": "EvaluatorName_s",
+          "yAxis": ["AvgDurationSec", "MaxDurationSec"]
+        }
+      },
+      "customWidth": "40",
+      "name": "chart-duration"
+    },
+
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "FoundryEvals_CL\n| where TimeGenerated {TimeRange}\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\n| summarize AvgScore = round(avg(Score_d), 3) by FoundryProjectName_s, EvaluatorName_s\n| evaluate pivot(EvaluatorName_s, max(AvgScore))\n| order by FoundryProjectName_s asc",
+        "size": 1,
+        "title": "Score Heatmap — Project × Evaluator",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "^(?!FoundryProjectName_s).*",
+              "formatter": 8,
+              "formatOptions": { "min": 0, "max": 1, "palette": "redGreen" }
+            }
+          ],
+          "rowLimit": 50,
+          "filter": true
+        }
+      },
+      "name": "chart-heatmap"
+    },
+
+    {
+      "type": 1,
+      "content": { "json": "## ⚠️ Failures" },
+      "name": "section-failures"
+    },
+
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "FoundryEvals_CL\n| where TimeGenerated {TimeRange}\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\n| where Passed_b != true\n| project TimeGenerated, FoundryProjectName_s, TargetName_s, TargetType_s, EvaluatorName_s, Score_d, Threshold_d, Severity_s, ErrorMessage_s\n| order by TimeGenerated desc",
+        "size": 0,
+        "title": "Failed Eval Checks",
+        "noDataMessage": "✅ No failures in the selected time range.",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "Score_d",
+              "formatter": 8,
+              "formatOptions": { "min": 0, "max": 1, "palette": "redGreen" }
+            },
+            {
+              "columnMatch": "Severity_s",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "info",     "representation": "success", "text": "{0}{1}" },
+                  { "operator": "==", "thresholdValue": "warning",  "representation": "2",       "text": "{0}{1}" },
+                  { "operator": "==", "thresholdValue": "critical",  "representation": "4",       "text": "{0}{1}" }
+                ]
+              }
+            }
+          ],
+          "filter": true
+        }
+      },
+      "name": "failures-table"
+    },
+
+    {
+      "type": 1,
+      "content": { "json": "## 🗃️ All Results" },
+      "name": "section-all"
+    },
+
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "FoundryEvals_CL\n| where TimeGenerated {TimeRange}\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\n| project\n    TimeGenerated,\n    Project = FoundryProjectName_s,\n    Target = TargetName_s,\n    Type = TargetType_s,\n    Evaluator = EvaluatorName_s,\n    Category = EvaluatorCategory_s,\n    Score = Score_d,\n    Threshold = Threshold_d,\n    Passed = Passed_b,\n    Severity = Severity_s,\n    ['Duration (ms)'] = DurationMs_d,\n    RunId = EvalRunId_s\n| order by TimeGenerated desc",
+        "size": 1,
+        "title": "All Eval Results",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "Score",
+              "formatter": 8,
+              "formatOptions": { "min": 0, "max": 1, "palette": "redGreen" }
+            },
+            {
+              "columnMatch": "Passed",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "True",    "representation": "success", "text": "Pass" },
+                  { "operator": "Default",                          "representation": "error",   "text": "FAIL" }
+                ]
+              }
+            },
+            {
+              "columnMatch": "Severity",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "icons",
+                "thresholdsGrid": [
+                  { "operator": "==", "thresholdValue": "info",     "representation": "success", "text": "{0}{1}" },
+                  { "operator": "==", "thresholdValue": "warning",  "representation": "2",       "text": "{0}{1}" },
+                  { "operator": "==", "thresholdValue": "critical",  "representation": "4",       "text": "{0}{1}" }
+                ]
+              }
+            }
+          ],
+          "rowLimit": 500,
+          "filter": true
+        }
+      },
+      "name": "all-results-grid"
+    },
+
+    {
+      "type": 1,
+      "content": { "json": "## 🎯 Target Drill-Down" },
+      "name": "section-target"
+    },
+
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "FoundryEvals_CL\n| where TimeGenerated {TimeRange}\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\n| summarize AvgScore = round(avg(Score_d), 3) by TargetName_s, EvaluatorName_s\n| evaluate pivot(EvaluatorName_s, max(AvgScore))\n| order by TargetName_s asc",
+        "size": 1,
+        "title": "Score Heatmap — Target × Evaluator",
+        "timeContext": { "durationMs": 0 },
+        "timeContextFromParameter": "TimeRange",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "^(?!TargetName_s).*",
+              "formatter": 8,
+              "formatOptions": { "min": 0, "max": 1, "palette": "redGreen" }
+            }
+          ],
+          "rowLimit": 100,
+          "filter": true
+        }
+      },
+      "name": "target-heatmap"
+    },
+
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "FoundryEvals_CL\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\n| summarize Checks=count(), Passed=countif(Passed_b == true), Failed=countif(Passed_b != true), LastRun=max(TimeGenerated), Project=any(FoundryProjectName_s), Type=any(TargetType_s) by TargetName_s, EvalRunId_s\n| summarize arg_max(LastRun, *) by TargetName_s\n| extend ['Pass Rate %']=round(100.0 * Passed / Checks, 1)\n| project LastRun, Project, Target=TargetName_s, Type, Checks, Passed, Failed, ['Pass Rate %']\n| order by ['Pass Rate %'] asc",
+        "size": 1,
+        "title": "Latest Run — Status per Target",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "Pass Rate %",
+              "formatter": 8,
+              "formatOptions": { "min": 0, "max": 100, "palette": "redGreen" }
+            },
+            {
+              "columnMatch": "Failed",
+              "formatter": 18,
+              "formatOptions": {
+                "thresholdsOptions": "colors",
+                "thresholdsGrid": [
+                  { "operator": ">", "thresholdValue": "0", "representation": "redBright", "text": "{0}{1}" },
+                  { "operator": "Default", "representation": "green", "text": "{0}{1}" }
+                ]
+              }
+            }
+          ],
+          "rowLimit": 100,
+          "filter": true
+        }
+      },
+      "customWidth": "50",
+      "name": "latest-run-table"
+    },
+
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let current = FoundryEvals_CL\n| where TimeGenerated >= ago(7d)\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\n| summarize CurrentPassRate = round(100.0 * countif(Passed_b == true) / count(), 1) by TargetName_s;\nlet prior = FoundryEvals_CL\n| where TimeGenerated between(ago(14d)..ago(7d))\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\n| summarize PriorPassRate = round(100.0 * countif(Passed_b == true) / count(), 1) by TargetName_s;\ncurrent\n| join kind=leftouter prior on TargetName_s\n| project Target=TargetName_s, ['This Week %']=CurrentPassRate, ['Prior Week %']=PriorPassRate, ['Change %']=round(CurrentPassRate - PriorPassRate, 1)\n| order by ['Change %'] asc",
+        "size": 1,
+        "title": "Week-over-Week Regression",
+        "queryType": 0,
+        "resourceType": "microsoft.operationalinsights/workspaces",
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "This Week %|Prior Week %",
+              "formatter": 8,
+              "formatOptions": { "min": 0, "max": 100, "palette": "redGreen" }
+            },
+            {
+              "columnMatch": "Change %",
+              "formatter": 8,
+              "formatOptions": { "min": -20, "max": 20, "palette": "redGreen" }
+            }
+          ],
+          "rowLimit": 100,
+          "filter": true
+        }
+      },
+      "customWidth": "50",
+      "name": "regression-table"
+    }
+  ]
+}

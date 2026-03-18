@@ -1,0 +1,1 @@
+pip install -r src\nightly_evals\requirements.txt

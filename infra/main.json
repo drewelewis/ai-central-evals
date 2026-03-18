@@ -1,0 +1,1519 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.39.26.7824",
+      "templateHash": "1013793098715406275"
+    }
+  },
+  "parameters": {
+    "environmentName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "metadata": {
+        "description": "Name of the environment (used to generate resource names)"
+      }
+    },
+    "location": {
+      "type": "string",
+      "metadata": {
+        "description": "Primary Azure region for all resources"
+      }
+    },
+    "principalId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Principal ID of the user running azd provision (for local testing RBAC)"
+      }
+    },
+    "deployGptModel": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Set to false to skip creating a gpt-4.1 deployment when quota is exhausted"
+      }
+    },
+    "existingOpenAiEndpoint": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Override endpoint for quality evaluators when reusing an existing deployment. Leave blank to use the provisioned AI Services account."
+      }
+    },
+    "existingOpenAiDeployment": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Override deployment name when reusing an existing deployment."
+      }
+    },
+    "deploymentTimestamp": {
+      "type": "string",
+      "defaultValue": "[utcNow()]",
+      "metadata": {
+        "description": "Timestamp injected at provision time — forces the workbook resource to update on every azd provision."
+      }
+    }
+  },
+  "variables": {
+    "$fxv#0": {
+      "cognitiveServicesAIServices": "ais-",
+      "cognitiveServicesProjects": "aiproj-",
+      "insightsComponents": "appi-",
+      "insightsDce": "dce-",
+      "insightsDcr": "dcr-",
+      "insightsWorkbooks": "wb-",
+      "keyVaultVaults": "kv-",
+      "operationalInsightsWorkspaces": "log-",
+      "resourcesResourceGroups": "rg-",
+      "storageStorageAccounts": "st",
+      "webServerFarms": "asp-",
+      "webSitesFunctions": "func-"
+    },
+    "abbrs": "[variables('$fxv#0')]",
+    "resourceToken": "[toLower(uniqueString(subscription().id, parameters('environmentName'), parameters('location')))]",
+    "tags": {
+      "azd-env-name": "[parameters('environmentName')]",
+      "solution": "ai-central-evals"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2022-09-01",
+      "name": "[format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))]",
+      "location": "[parameters('location')]",
+      "tags": "[variables('tags')]"
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "monitoring",
+      "resourceGroup": "[format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          },
+          "logAnalyticsWorkspaceName": {
+            "value": "[format('{0}{1}', variables('abbrs').operationalInsightsWorkspaces, variables('resourceToken'))]"
+          },
+          "applicationInsightsName": {
+            "value": "[format('{0}{1}', variables('abbrs').insightsComponents, variables('resourceToken'))]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "2667766317371871858"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "object"
+            },
+            "logAnalyticsWorkspaceName": {
+              "type": "string"
+            },
+            "applicationInsightsName": {
+              "type": "string"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.OperationalInsights/workspaces",
+              "apiVersion": "2022-10-01",
+              "name": "[parameters('logAnalyticsWorkspaceName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "sku": {
+                  "name": "PerGB2018"
+                },
+                "retentionInDays": 90,
+                "features": {
+                  "enableLogAccessUsingOnlyResourcePermissions": true
+                },
+                "publicNetworkAccessForIngestion": "Enabled",
+                "publicNetworkAccessForQuery": "Enabled"
+              }
+            },
+            {
+              "type": "Microsoft.Insights/components",
+              "apiVersion": "2020-02-02",
+              "name": "[parameters('applicationInsightsName')]",
+              "location": "[parameters('location')]",
+              "kind": "web",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "Application_Type": "web",
+                "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName'))]",
+                "publicNetworkAccessForIngestion": "Enabled",
+                "publicNetworkAccessForQuery": "Enabled"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "logAnalyticsWorkspaceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName'))]"
+            },
+            "logAnalyticsWorkspaceName": {
+              "type": "string",
+              "value": "[parameters('logAnalyticsWorkspaceName')]"
+            },
+            "logAnalyticsWorkspaceCustomerId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', parameters('logAnalyticsWorkspaceName')), '2022-10-01').customerId]"
+            },
+            "applicationInsightsConnectionString": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Insights/components', parameters('applicationInsightsName')), '2020-02-02').ConnectionString]"
+            },
+            "applicationInsightsId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Insights/components', parameters('applicationInsightsName'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "storage",
+      "resourceGroup": "[format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          },
+          "storageAccountName": {
+            "value": "[format('{0}{1}', variables('abbrs').storageStorageAccounts, variables('resourceToken'))]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "8542883322978631966"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "object"
+            },
+            "storageAccountName": {
+              "type": "string"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2023-01-01",
+              "name": "[parameters('storageAccountName')]",
+              "location": "[parameters('location')]",
+              "kind": "StorageV2",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "Standard_LRS"
+              },
+              "properties": {
+                "minimumTlsVersion": "TLS1_2",
+                "allowBlobPublicAccess": false,
+                "allowSharedKeyAccess": false,
+                "publicNetworkAccess": "Enabled",
+                "supportsHttpsTrafficOnly": true,
+                "networkAcls": {
+                  "defaultAction": "Allow",
+                  "bypass": "AzureServices"
+                },
+                "encryption": {
+                  "services": {
+                    "blob": {
+                      "enabled": true
+                    },
+                    "file": {
+                      "enabled": true
+                    }
+                  },
+                  "keySource": "Microsoft.Storage"
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices",
+              "apiVersion": "2023-01-01",
+              "name": "[format('{0}/{1}', parameters('storageAccountName'), 'default')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+              "apiVersion": "2023-01-01",
+              "name": "[format('{0}/{1}/{2}', parameters('storageAccountName'), 'default', 'deployments')]",
+              "properties": {
+                "publicAccess": "None"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storageAccountName'), 'default')]"
+              ]
+            }
+          ],
+          "outputs": {
+            "storageAccountName": {
+              "type": "string",
+              "value": "[parameters('storageAccountName')]"
+            },
+            "storageAccountId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "dataCollection",
+      "resourceGroup": "[format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          },
+          "logAnalyticsWorkspaceId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.logAnalyticsWorkspaceId.value]"
+          },
+          "logAnalyticsWorkspaceName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.logAnalyticsWorkspaceName.value]"
+          },
+          "dataCollectionEndpointName": {
+            "value": "[format('{0}{1}', variables('abbrs').insightsDce, variables('resourceToken'))]"
+          },
+          "dataCollectionRuleName": {
+            "value": "[format('{0}{1}', variables('abbrs').insightsDcr, variables('resourceToken'))]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "4836341461797056652"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "object"
+            },
+            "logAnalyticsWorkspaceId": {
+              "type": "string"
+            },
+            "logAnalyticsWorkspaceName": {
+              "type": "string"
+            },
+            "dataCollectionEndpointName": {
+              "type": "string"
+            },
+            "dataCollectionRuleName": {
+              "type": "string"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Insights/dataCollectionEndpoints",
+              "apiVersion": "2022-06-01",
+              "name": "[parameters('dataCollectionEndpointName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "networkAcls": {
+                  "publicNetworkAccess": "Enabled"
+                }
+              }
+            },
+            {
+              "type": "Microsoft.OperationalInsights/workspaces/tables",
+              "apiVersion": "2022-10-01",
+              "name": "[format('{0}/FoundryEvals_CL', parameters('logAnalyticsWorkspaceName'))]",
+              "properties": {
+                "schema": {
+                  "name": "FoundryEvals_CL",
+                  "columns": [
+                    {
+                      "name": "TimeGenerated",
+                      "type": "datetime",
+                      "description": "UTC timestamp the eval row was written"
+                    },
+                    {
+                      "name": "TenantId_s",
+                      "type": "string",
+                      "description": "Azure tenant ID"
+                    },
+                    {
+                      "name": "SubscriptionId_s",
+                      "type": "string",
+                      "description": "Azure subscription ID"
+                    },
+                    {
+                      "name": "ResourceGroup_s",
+                      "type": "string",
+                      "description": "Resource group of the Foundry project"
+                    },
+                    {
+                      "name": "FoundryProjectName_s",
+                      "type": "string",
+                      "description": "AI Foundry project name"
+                    },
+                    {
+                      "name": "FoundryProjectId_s",
+                      "type": "string",
+                      "description": "Full ARM resource ID of the Foundry project (hub/workspace)"
+                    },
+                    {
+                      "name": "TargetType_s",
+                      "type": "string",
+                      "description": "model | agent | dataset"
+                    },
+                    {
+                      "name": "TargetName_s",
+                      "type": "string",
+                      "description": "Deployment name, agent name, or dataset name"
+                    },
+                    {
+                      "name": "TargetVersion_s",
+                      "type": "string",
+                      "description": "Model version or agent version"
+                    },
+                    {
+                      "name": "EvalPackVersion_s",
+                      "type": "string",
+                      "description": "Version of the baseline eval pack executed"
+                    },
+                    {
+                      "name": "EvalRunId_s",
+                      "type": "string",
+                      "description": "Unique GUID for this eval run batch"
+                    },
+                    {
+                      "name": "EvalDatasetPath_s",
+                      "type": "string",
+                      "description": "Path/URI of the test dataset used"
+                    },
+                    {
+                      "name": "TriggerType_s",
+                      "type": "string",
+                      "description": "scheduled | manual | ci"
+                    },
+                    {
+                      "name": "EvaluatorName_s",
+                      "type": "string",
+                      "description": "Name of the individual evaluator"
+                    },
+                    {
+                      "name": "EvaluatorCategory_s",
+                      "type": "string",
+                      "description": "quality | safety | similarity | custom"
+                    },
+                    {
+                      "name": "Score_d",
+                      "type": "real",
+                      "description": "Numeric score (0.0 – 1.0 normalized)"
+                    },
+                    {
+                      "name": "Threshold_d",
+                      "type": "real",
+                      "description": "Minimum passing score for this evaluator"
+                    },
+                    {
+                      "name": "Passed_b",
+                      "type": "boolean",
+                      "description": "true if Score >= Threshold"
+                    },
+                    {
+                      "name": "Severity_s",
+                      "type": "string",
+                      "description": "info | warning | critical"
+                    },
+                    {
+                      "name": "ErrorMessage_s",
+                      "type": "string",
+                      "description": "Non-empty if the evaluator raised an exception"
+                    },
+                    {
+                      "name": "DurationMs_d",
+                      "type": "real",
+                      "description": "Evaluator wall-clock time in milliseconds"
+                    },
+                    {
+                      "name": "RawOutput_s",
+                      "type": "string",
+                      "description": "JSON-serialized raw evaluator output (truncated to 8 KB)"
+                    }
+                  ]
+                },
+                "retentionInDays": 90,
+                "totalRetentionInDays": 180
+              }
+            },
+            {
+              "type": "Microsoft.Insights/dataCollectionRules",
+              "apiVersion": "2022-06-01",
+              "name": "[parameters('dataCollectionRuleName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "dataCollectionEndpointId": "[resourceId('Microsoft.Insights/dataCollectionEndpoints', parameters('dataCollectionEndpointName'))]",
+                "streamDeclarations": {
+                  "Custom-FoundryEvals_CL": {
+                    "columns": [
+                      {
+                        "name": "TimeGenerated",
+                        "type": "datetime"
+                      },
+                      {
+                        "name": "TenantId_s",
+                        "type": "string"
+                      },
+                      {
+                        "name": "SubscriptionId_s",
+                        "type": "string"
+                      },
+                      {
+                        "name": "ResourceGroup_s",
+                        "type": "string"
+                      },
+                      {
+                        "name": "FoundryProjectName_s",
+                        "type": "string"
+                      },
+                      {
+                        "name": "FoundryProjectId_s",
+                        "type": "string"
+                      },
+                      {
+                        "name": "TargetType_s",
+                        "type": "string"
+                      },
+                      {
+                        "name": "TargetName_s",
+                        "type": "string"
+                      },
+                      {
+                        "name": "TargetVersion_s",
+                        "type": "string"
+                      },
+                      {
+                        "name": "EvalPackVersion_s",
+                        "type": "string"
+                      },
+                      {
+                        "name": "EvalRunId_s",
+                        "type": "string"
+                      },
+                      {
+                        "name": "EvalDatasetPath_s",
+                        "type": "string"
+                      },
+                      {
+                        "name": "TriggerType_s",
+                        "type": "string"
+                      },
+                      {
+                        "name": "EvaluatorName_s",
+                        "type": "string"
+                      },
+                      {
+                        "name": "EvaluatorCategory_s",
+                        "type": "string"
+                      },
+                      {
+                        "name": "Score_d",
+                        "type": "real"
+                      },
+                      {
+                        "name": "Threshold_d",
+                        "type": "real"
+                      },
+                      {
+                        "name": "Passed_b",
+                        "type": "boolean"
+                      },
+                      {
+                        "name": "Severity_s",
+                        "type": "string"
+                      },
+                      {
+                        "name": "ErrorMessage_s",
+                        "type": "string"
+                      },
+                      {
+                        "name": "DurationMs_d",
+                        "type": "real"
+                      },
+                      {
+                        "name": "RawOutput_s",
+                        "type": "string"
+                      }
+                    ]
+                  }
+                },
+                "destinations": {
+                  "logAnalytics": [
+                    {
+                      "name": "la-destination",
+                      "workspaceResourceId": "[parameters('logAnalyticsWorkspaceId')]"
+                    }
+                  ]
+                },
+                "dataFlows": [
+                  {
+                    "streams": [
+                      "Custom-FoundryEvals_CL"
+                    ],
+                    "destinations": [
+                      "la-destination"
+                    ],
+                    "transformKql": "source",
+                    "outputStream": "Custom-FoundryEvals_CL"
+                  }
+                ]
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Insights/dataCollectionEndpoints', parameters('dataCollectionEndpointName'))]",
+                "[resourceId('Microsoft.OperationalInsights/workspaces/tables', split(format('{0}/FoundryEvals_CL', parameters('logAnalyticsWorkspaceName')), '/')[0], split(format('{0}/FoundryEvals_CL', parameters('logAnalyticsWorkspaceName')), '/')[1])]"
+              ]
+            }
+          ],
+          "outputs": {
+            "dataCollectionEndpointUri": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Insights/dataCollectionEndpoints', parameters('dataCollectionEndpointName')), '2022-06-01').logsIngestion.endpoint]"
+            },
+            "dataCollectionEndpointId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Insights/dataCollectionEndpoints', parameters('dataCollectionEndpointName'))]"
+            },
+            "dataCollectionRuleImmutableId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Insights/dataCollectionRules', parameters('dataCollectionRuleName')), '2022-06-01').immutableId]"
+            },
+            "dataCollectionRuleId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Insights/dataCollectionRules', parameters('dataCollectionRuleName'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'monitoring')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "foundry",
+      "resourceGroup": "[format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          },
+          "aiServicesAccountName": {
+            "value": "[format('{0}{1}', variables('abbrs').cognitiveServicesAIServices, variables('resourceToken'))]"
+          },
+          "aiProjectName": {
+            "value": "[format('{0}{1}', variables('abbrs').cognitiveServicesProjects, variables('resourceToken'))]"
+          },
+          "deployGptModel": {
+            "value": "[parameters('deployGptModel')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "16328509996988081002"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "object"
+            },
+            "aiServicesAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Azure AI Services account (Foundry hub)"
+              }
+            },
+            "aiProjectName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the AI Foundry project (child of the account)"
+              }
+            },
+            "gptDeploymentName": {
+              "type": "string",
+              "defaultValue": "gpt-4.1",
+              "metadata": {
+                "description": "Name of the gpt-4.1 deployment (used as AZURE_OPENAI_DEPLOYMENT)"
+              }
+            },
+            "gptCapacityK": {
+              "type": "int",
+              "defaultValue": 50,
+              "metadata": {
+                "description": "Capacity in thousands of tokens per minute for the Standard (regional) deployment"
+              }
+            },
+            "deployGptModel": {
+              "type": "bool",
+              "defaultValue": true,
+              "metadata": {
+                "description": "Set to false to skip creating a new GPT deployment (use when quota is exhausted)"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.CognitiveServices/accounts",
+              "apiVersion": "2025-04-01-preview",
+              "name": "[parameters('aiServicesAccountName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "AIServices",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "sku": {
+                "name": "S0"
+              },
+              "properties": {
+                "publicNetworkAccess": "Enabled",
+                "customSubDomainName": "[parameters('aiServicesAccountName')]",
+                "allowProjectManagement": true
+              }
+            },
+            {
+              "type": "Microsoft.CognitiveServices/accounts/projects",
+              "apiVersion": "2025-04-01-preview",
+              "name": "[format('{0}/{1}', parameters('aiServicesAccountName'), parameters('aiProjectName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {},
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('aiServicesAccountName'))]"
+              ]
+            },
+            {
+              "condition": "[parameters('deployGptModel')]",
+              "type": "Microsoft.CognitiveServices/accounts/deployments",
+              "apiVersion": "2024-10-01",
+              "name": "[format('{0}/{1}', parameters('aiServicesAccountName'), parameters('gptDeploymentName'))]",
+              "sku": {
+                "name": "Standard",
+                "capacity": "[parameters('gptCapacityK')]"
+              },
+              "properties": {
+                "model": {
+                  "format": "OpenAI",
+                  "name": "gpt-4.1",
+                  "version": "2025-04-14"
+                },
+                "versionUpgradeOption": "OnceNewDefaultVersionAvailable"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('aiServicesAccountName'), parameters('aiProjectName'))]",
+                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('aiServicesAccountName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "aiServicesEndpoint": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.CognitiveServices/accounts', parameters('aiServicesAccountName')), '2025-04-01-preview').endpoint]"
+            },
+            "aiServicesAccountId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('aiServicesAccountName'))]"
+            },
+            "aiServicesAccountName": {
+              "type": "string",
+              "value": "[parameters('aiServicesAccountName')]"
+            },
+            "aiProjectId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('aiServicesAccountName'), parameters('aiProjectName'))]"
+            },
+            "aiProjectName": {
+              "type": "string",
+              "value": "[parameters('aiProjectName')]"
+            },
+            "gptDeploymentName": {
+              "type": "string",
+              "value": "[parameters('gptDeploymentName')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "functionApp",
+      "resourceGroup": "[format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          },
+          "functionAppName": {
+            "value": "[format('{0}{1}', variables('abbrs').webSitesFunctions, variables('resourceToken'))]"
+          },
+          "appServicePlanName": {
+            "value": "[format('{0}{1}', variables('abbrs').webServerFarms, variables('resourceToken'))]"
+          },
+          "storageAccountName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.storageAccountName.value]"
+          },
+          "applicationInsightsConnectionString": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.applicationInsightsConnectionString.value]"
+          },
+          "logAnalyticsWorkspaceId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.logAnalyticsWorkspaceId.value]"
+          },
+          "dataCollectionEndpointUri": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'dataCollection'), '2025-04-01').outputs.dataCollectionEndpointUri.value]"
+          },
+          "dataCollectionRuleImmutableId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'dataCollection'), '2025-04-01').outputs.dataCollectionRuleImmutableId.value]"
+          },
+          "subscriptionId": {
+            "value": "[subscription().subscriptionId]"
+          },
+          "azureOpenAiEndpoint": "[if(not(empty(parameters('existingOpenAiEndpoint'))), createObject('value', parameters('existingOpenAiEndpoint')), createObject('value', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'foundry'), '2025-04-01').outputs.aiServicesEndpoint.value))]",
+          "azureOpenAiDeployment": "[if(not(empty(parameters('existingOpenAiDeployment'))), createObject('value', parameters('existingOpenAiDeployment')), createObject('value', reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'foundry'), '2025-04-01').outputs.gptDeploymentName.value))]"
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "4070169798415009854"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "object"
+            },
+            "functionAppName": {
+              "type": "string"
+            },
+            "appServicePlanName": {
+              "type": "string"
+            },
+            "storageAccountName": {
+              "type": "string"
+            },
+            "applicationInsightsConnectionString": {
+              "type": "string"
+            },
+            "logAnalyticsWorkspaceId": {
+              "type": "string"
+            },
+            "dataCollectionEndpointUri": {
+              "type": "string"
+            },
+            "dataCollectionRuleImmutableId": {
+              "type": "string"
+            },
+            "subscriptionId": {
+              "type": "string"
+            },
+            "azureOpenAiEndpoint": {
+              "type": "string"
+            },
+            "azureOpenAiDeployment": {
+              "type": "string",
+              "defaultValue": "gpt-4.1"
+            },
+            "azureOpenAiApiVersion": {
+              "type": "string",
+              "defaultValue": "2024-08-01-preview"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Web/serverfarms",
+              "apiVersion": "2023-01-01",
+              "name": "[parameters('appServicePlanName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "B1",
+                "tier": "Basic"
+              },
+              "kind": "linux",
+              "properties": {
+                "reserved": true
+              }
+            },
+            {
+              "type": "Microsoft.Web/sites",
+              "apiVersion": "2023-01-01",
+              "name": "[parameters('functionAppName')]",
+              "location": "[parameters('location')]",
+              "tags": "[union(parameters('tags'), createObject('azd-service-name', 'nightly-evals'))]",
+              "kind": "functionapp,linux",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', parameters('appServicePlanName'))]",
+                "httpsOnly": true,
+                "siteConfig": {
+                  "linuxFxVersion": "Python|3.11",
+                  "appSettings": [
+                    {
+                      "name": "AzureWebJobsStorage__accountName",
+                      "value": "[parameters('storageAccountName')]"
+                    },
+                    {
+                      "name": "AzureWebJobsStorage__credential",
+                      "value": "managedidentity"
+                    },
+                    {
+                      "name": "FUNCTIONS_EXTENSION_VERSION",
+                      "value": "~4"
+                    },
+                    {
+                      "name": "FUNCTIONS_WORKER_RUNTIME",
+                      "value": "python"
+                    },
+                    {
+                      "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                      "value": "[parameters('applicationInsightsConnectionString')]"
+                    },
+                    {
+                      "name": "AZURE_SUBSCRIPTION_ID",
+                      "value": "[parameters('subscriptionId')]"
+                    },
+                    {
+                      "name": "LOG_ANALYTICS_WORKSPACE_ID",
+                      "value": "[parameters('logAnalyticsWorkspaceId')]"
+                    },
+                    {
+                      "name": "DATA_COLLECTION_ENDPOINT_URI",
+                      "value": "[parameters('dataCollectionEndpointUri')]"
+                    },
+                    {
+                      "name": "DATA_COLLECTION_RULE_IMMUTABLE_ID",
+                      "value": "[parameters('dataCollectionRuleImmutableId')]"
+                    },
+                    {
+                      "name": "EVAL_PACK_VERSION",
+                      "value": "1.0.0"
+                    },
+                    {
+                      "name": "EVAL_SCORE_THRESHOLD",
+                      "value": "0.7"
+                    },
+                    {
+                      "name": "EVAL_ENABLE_QUALITY",
+                      "value": "true"
+                    },
+                    {
+                      "name": "EVAL_ENABLE_SAFETY",
+                      "value": "true"
+                    },
+                    {
+                      "name": "EVAL_ENABLE_SIMILARITY",
+                      "value": "true"
+                    },
+                    {
+                      "name": "EVAL_ROW_DELAY_SECONDS",
+                      "value": "2.0"
+                    },
+                    {
+                      "name": "AZURE_OPENAI_ENDPOINT",
+                      "value": "[parameters('azureOpenAiEndpoint')]"
+                    },
+                    {
+                      "name": "AZURE_OPENAI_DEPLOYMENT",
+                      "value": "[parameters('azureOpenAiDeployment')]"
+                    },
+                    {
+                      "name": "AZURE_OPENAI_API_VERSION",
+                      "value": "[parameters('azureOpenAiApiVersion')]"
+                    }
+                  ],
+                  "ftpsState": "Disabled",
+                  "minTlsVersion": "1.2"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', parameters('appServicePlanName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "functionAppName": {
+              "type": "string",
+              "value": "[parameters('functionAppName')]"
+            },
+            "functionAppId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Web/sites', parameters('functionAppName'))]"
+            },
+            "functionAppPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('functionAppName')), '2023-01-01', 'full').identity.principalId]"
+            },
+            "functionAppHostName": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('functionAppName')), '2023-01-01').defaultHostName]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'dataCollection')]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'foundry')]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'monitoring')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName')))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'storage')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "workbook",
+      "resourceGroup": "[format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          },
+          "workbookName": {
+            "value": "[format('{0}{1}', variables('abbrs').insightsWorkbooks, variables('resourceToken'))]"
+          },
+          "workbookDisplayName": {
+            "value": "AI Foundry — Nightly Evals"
+          },
+          "logAnalyticsWorkspaceId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.logAnalyticsWorkspaceId.value]"
+          },
+          "contentVersion": {
+            "value": "[parameters('deploymentTimestamp')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "15725155495663922365"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "object"
+            },
+            "workbookName": {
+              "type": "string"
+            },
+            "workbookDisplayName": {
+              "type": "string"
+            },
+            "logAnalyticsWorkspaceId": {
+              "type": "string"
+            },
+            "contentVersion": {
+              "type": "string",
+              "defaultValue": "1.0"
+            }
+          },
+          "variables": {
+            "$fxv#0": "{\r\n  \"version\": \"Notebook/1.0\",\r\n  \"isLocked\": false,\r\n  \"fallbackResourceIds\": [\"azure monitor\"],\r\n  \"items\": [\r\n    {\r\n      \"type\": 1,\r\n      \"content\": {\r\n        \"json\": \"# AI Foundry — Nightly Safety & Quality Evals\\n_Central dashboard for all Foundry project safety and quality evaluation results. Use the filters above to scope by time range, project, or target type._\"\r\n      },\r\n      \"name\": \"header\"\r\n    },\r\n    {\r\n      \"type\": 9,\r\n      \"content\": {\r\n        \"version\": \"KqlParameterItem/1.0\",\r\n        \"parameters\": [\r\n          {\r\n            \"id\": \"a1b2c3d4-0001-0001-0001-000000000001\",\r\n            \"version\": \"KqlParameterItem/1.0\",\r\n            \"name\": \"TimeRange\",\r\n            \"label\": \"Time Range\",\r\n            \"type\": 4,\r\n            \"isRequired\": true,\r\n            \"value\": { \"durationMs\": 604800000 },\r\n            \"typeSettings\": {\r\n              \"selectableValues\": [\r\n                { \"durationMs\": 3600000 },\r\n                { \"durationMs\": 86400000 },\r\n                { \"durationMs\": 259200000 },\r\n                { \"durationMs\": 604800000 },\r\n                { \"durationMs\": 2592000000 }\r\n              ],\r\n              \"allowCustom\": true\r\n            }\r\n          },\r\n          {\r\n            \"id\": \"a1b2c3d4-0001-0001-0001-000000000002\",\r\n            \"version\": \"KqlParameterItem/1.0\",\r\n            \"name\": \"Project\",\r\n            \"label\": \"Project\",\r\n            \"type\": 2,\r\n            \"isRequired\": false,\r\n            \"multiSelect\": true,\r\n            \"quote\": \"'\",\r\n            \"delimiter\": \",\",\r\n            \"query\": \"FoundryEvals_CL | summarize by FoundryProjectName_s | sort by FoundryProjectName_s asc\",\r\n            \"value\": [\"value::all\"],\r\n            \"typeSettings\": {\r\n              \"additionalResourceOptions\": [\"value::all\"],\r\n              \"showDefault\": false\r\n            },\r\n            \"queryType\": 0,\r\n            \"resourceType\": \"microsoft.operationalinsights/workspaces\"\r\n          },\r\n          {\r\n            \"id\": \"a1b2c3d4-0001-0001-0001-000000000003\",\r\n            \"version\": \"KqlParameterItem/1.0\",\r\n            \"name\": \"TargetType\",\r\n            \"label\": \"Target Type\",\r\n            \"type\": 2,\r\n            \"isRequired\": false,\r\n            \"multiSelect\": true,\r\n            \"quote\": \"'\",\r\n            \"delimiter\": \",\",\r\n            \"query\": \"FoundryEvals_CL | summarize by TargetType_s | sort by TargetType_s asc\",\r\n            \"value\": [\"value::all\"],\r\n            \"typeSettings\": {\r\n              \"additionalResourceOptions\": [\"value::all\"],\r\n              \"showDefault\": false\r\n            },\r\n            \"queryType\": 0,\r\n            \"resourceType\": \"microsoft.operationalinsights/workspaces\"\r\n          },\r\n          {\r\n            \"id\": \"a1b2c3d4-0001-0001-0001-000000000004\",\r\n            \"version\": \"KqlParameterItem/1.0\",\r\n            \"name\": \"Target\",\r\n            \"label\": \"Target\",\r\n            \"type\": 2,\r\n            \"isRequired\": false,\r\n            \"multiSelect\": true,\r\n            \"quote\": \"'\",\r\n            \"delimiter\": \",\",\r\n            \"query\": \"FoundryEvals_CL\\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\\n| summarize by TargetName_s\\n| sort by TargetName_s asc\",\r\n            \"value\": [\"value::all\"],\r\n            \"typeSettings\": {\r\n              \"additionalResourceOptions\": [\"value::all\"],\r\n              \"showDefault\": false\r\n            },\r\n            \"queryType\": 0,\r\n            \"resourceType\": \"microsoft.operationalinsights/workspaces\"\r\n          }\r\n        ],\r\n        \"style\": \"above\",\r\n        \"queryType\": 0,\r\n        \"resourceType\": \"microsoft.operationalinsights/workspaces\"\r\n      },\r\n      \"name\": \"parameters\"\r\n    },\r\n\r\n    {\r\n      \"type\": 3,\r\n      \"content\": {\r\n        \"version\": \"KqlItem/1.0\",\r\n        \"query\": \"FoundryEvals_CL\\n| where TimeGenerated {TimeRange}\\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\\n| summarize EvalRuns = dcount(EvalRunId_s), Targets = dcount(strcat(FoundryProjectName_s, '|', TargetName_s)), ChecksRun = count(), ChecksPassed = countif(Passed_b == true), PassRate = round(100.0 * countif(Passed_b == true) / count(), 1)\\n| project rows = pack_array(\\n    pack('Metric', 'Eval Runs', 'Value', toreal(EvalRuns)),\\n    pack('Metric', 'Targets Evaluated', 'Value', toreal(Targets)),\\n    pack('Metric', 'Checks Run', 'Value', toreal(ChecksRun)),\\n    pack('Metric', 'Checks Passed', 'Value', toreal(ChecksPassed)),\\n    pack('Metric', 'Overall Pass Rate %', 'Value', PassRate))\\n| mv-expand rows\\n| project Metric = tostring(rows['Metric']), Value = toreal(rows['Value'])\",\r\n        \"size\": 4,\r\n        \"title\": \"Summary\",\r\n        \"timeContext\": { \"durationMs\": 0 },\r\n        \"timeContextFromParameter\": \"TimeRange\",\r\n        \"queryType\": 0,\r\n        \"resourceType\": \"microsoft.operationalinsights/workspaces\",\r\n        \"visualization\": \"tiles\",\r\n        \"tileSettings\": {\r\n          \"showBorder\": false,\r\n          \"titleContent\": { \"columnMatch\": \"Metric\", \"formatter\": 1 },\r\n          \"leftContent\": { \"columnMatch\": \"Value\", \"formatter\": 12, \"formatOptions\": { \"palette\": \"auto\" } }\r\n        }\r\n      },\r\n      \"name\": \"kpi-tiles\"\r\n    },\r\n\r\n    {\r\n      \"type\": 1,\r\n      \"content\": { \"json\": \"## 📈 Pass Rate Trends\" },\r\n      \"name\": \"section-trends\"\r\n    },\r\n\r\n    {\r\n      \"type\": 3,\r\n      \"content\": {\r\n        \"version\": \"KqlItem/1.0\",\r\n        \"query\": \"FoundryEvals_CL\\n| where TimeGenerated {TimeRange}\\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\\n| summarize PassRate = round(100.0 * countif(Passed_b == true) / count(), 1) by bin(TimeGenerated, 1d), EvaluatorName_s\\n| order by TimeGenerated asc\",\r\n        \"size\": 0,\r\n        \"title\": \"Pass Rate Over Time — by Evaluator\",\r\n        \"timeContext\": { \"durationMs\": 0 },\r\n        \"timeContextFromParameter\": \"TimeRange\",\r\n        \"queryType\": 0,\r\n        \"resourceType\": \"microsoft.operationalinsights/workspaces\",\r\n        \"visualization\": \"timechart\",\r\n        \"chartSettings\": {\r\n          \"seriesAggregation\": 4,\r\n          \"ySettings\": {\r\n            \"numberFormatSettings\": { \"unit\": 1, \"options\": { \"style\": \"decimal\", \"maximumFractionDigits\": 1 } },\r\n            \"min\": 0,\r\n            \"max\": 100\r\n          }\r\n        }\r\n      },\r\n      \"customWidth\": \"60\",\r\n      \"name\": \"chart-passrate-time\"\r\n    },\r\n\r\n    {\r\n      \"type\": 3,\r\n      \"content\": {\r\n        \"version\": \"KqlItem/1.0\",\r\n        \"query\": \"FoundryEvals_CL\\n| where TimeGenerated {TimeRange}\\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\\n| summarize PassRate = round(100.0 * countif(Passed_b == true) / count(), 1), Checks = count() by EvaluatorName_s\\n| order by PassRate asc\",\r\n        \"size\": 3,\r\n        \"title\": \"Pass Rate — by Evaluator\",\r\n        \"timeContext\": { \"durationMs\": 0 },\r\n        \"timeContextFromParameter\": \"TimeRange\",\r\n        \"queryType\": 0,\r\n        \"resourceType\": \"microsoft.operationalinsights/workspaces\",\r\n        \"visualization\": \"barchart\",\r\n        \"chartSettings\": {\r\n          \"xAxis\": \"EvaluatorName_s\",\r\n          \"yAxis\": [\"PassRate\"],\r\n          \"ySettings\": { \"min\": 0, \"max\": 100 }\r\n        }\r\n      },\r\n      \"customWidth\": \"40\",\r\n      \"name\": \"chart-passrate-evaluator\"\r\n    },\r\n\r\n    {\r\n      \"type\": 3,\r\n      \"content\": {\r\n        \"version\": \"KqlItem/1.0\",\r\n        \"query\": \"FoundryEvals_CL\\n| where TimeGenerated {TimeRange}\\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\\n| summarize PassRate = round(100.0 * countif(Passed_b == true) / count(), 1), Checks = count() by FoundryProjectName_s\\n| order by PassRate asc\",\r\n        \"size\": 0,\r\n        \"title\": \"Pass Rate — by Project\",\r\n        \"timeContext\": { \"durationMs\": 0 },\r\n        \"timeContextFromParameter\": \"TimeRange\",\r\n        \"queryType\": 0,\r\n        \"resourceType\": \"microsoft.operationalinsights/workspaces\",\r\n        \"visualization\": \"barchart\",\r\n        \"chartSettings\": {\r\n          \"xAxis\": \"FoundryProjectName_s\",\r\n          \"yAxis\": [\"PassRate\"],\r\n          \"ySettings\": { \"min\": 0, \"max\": 100 }\r\n        }\r\n      },\r\n      \"customWidth\": \"50\",\r\n      \"name\": \"chart-passrate-project\"\r\n    },\r\n\r\n    {\r\n      \"type\": 3,\r\n      \"content\": {\r\n        \"version\": \"KqlItem/1.0\",\r\n        \"query\": \"FoundryEvals_CL\\n| where TimeGenerated {TimeRange}\\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\\n| summarize AvgScore = round(avg(Score_d), 3), PassRate = round(100.0 * countif(Passed_b == true) / count(), 1) by TargetType_s, EvaluatorName_s\\n| order by TargetType_s asc, EvaluatorName_s asc\",\r\n        \"size\": 3,\r\n        \"title\": \"Agent vs Model — Score by Evaluator\",\r\n        \"timeContext\": { \"durationMs\": 0 },\r\n        \"timeContextFromParameter\": \"TimeRange\",\r\n        \"queryType\": 0,\r\n        \"resourceType\": \"microsoft.operationalinsights/workspaces\",\r\n        \"visualization\": \"barchart\",\r\n        \"chartSettings\": {\r\n          \"xAxis\": \"EvaluatorName_s\",\r\n          \"yAxis\": [\"AvgScore\"],\r\n          \"splitBy\": \"TargetType_s\",\r\n          \"ySettings\": { \"min\": 0, \"max\": 1 }\r\n        }\r\n      },\r\n      \"customWidth\": \"50\",\r\n      \"name\": \"chart-agent-vs-model\"\r\n    },\r\n\r\n    {\r\n      \"type\": 1,\r\n      \"content\": { \"json\": \"## 📊 Scores & Performance\" },\r\n      \"name\": \"section-scores\"\r\n    },\r\n\r\n    {\r\n      \"type\": 3,\r\n      \"content\": {\r\n        \"version\": \"KqlItem/1.0\",\r\n        \"query\": \"FoundryEvals_CL\\n| where TimeGenerated {TimeRange}\\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\\n| summarize AvgScore = round(avg(Score_d), 3) by bin(TimeGenerated, 1d), EvaluatorCategory_s\\n| order by TimeGenerated asc\",\r\n        \"size\": 0,\r\n        \"title\": \"Average Score Over Time — by Category\",\r\n        \"timeContext\": { \"durationMs\": 0 },\r\n        \"timeContextFromParameter\": \"TimeRange\",\r\n        \"queryType\": 0,\r\n        \"resourceType\": \"microsoft.operationalinsights/workspaces\",\r\n        \"visualization\": \"timechart\",\r\n        \"chartSettings\": {\r\n          \"ySettings\": { \"min\": 0, \"max\": 1 }\r\n        }\r\n      },\r\n      \"customWidth\": \"60\",\r\n      \"name\": \"chart-score-time\"\r\n    },\r\n\r\n    {\r\n      \"type\": 3,\r\n      \"content\": {\r\n        \"version\": \"KqlItem/1.0\",\r\n        \"query\": \"FoundryEvals_CL\\n| where TimeGenerated {TimeRange}\\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\\n| summarize\\n    AvgDurationSec = round(avg(DurationMs_d) / 1000, 1),\\n    MaxDurationSec = round(max(DurationMs_d) / 1000, 1),\\n    Runs = count()\\n  by EvaluatorName_s\\n| order by AvgDurationSec desc\",\r\n        \"size\": 3,\r\n        \"title\": \"Evaluator Duration (seconds)\",\r\n        \"timeContext\": { \"durationMs\": 0 },\r\n        \"timeContextFromParameter\": \"TimeRange\",\r\n        \"queryType\": 0,\r\n        \"resourceType\": \"microsoft.operationalinsights/workspaces\",\r\n        \"visualization\": \"barchart\",\r\n        \"chartSettings\": {\r\n          \"xAxis\": \"EvaluatorName_s\",\r\n          \"yAxis\": [\"AvgDurationSec\", \"MaxDurationSec\"]\r\n        }\r\n      },\r\n      \"customWidth\": \"40\",\r\n      \"name\": \"chart-duration\"\r\n    },\r\n\r\n    {\r\n      \"type\": 3,\r\n      \"content\": {\r\n        \"version\": \"KqlItem/1.0\",\r\n        \"query\": \"FoundryEvals_CL\\n| where TimeGenerated {TimeRange}\\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\\n| summarize AvgScore = round(avg(Score_d), 3) by FoundryProjectName_s, EvaluatorName_s\\n| evaluate pivot(EvaluatorName_s, max(AvgScore))\\n| order by FoundryProjectName_s asc\",\r\n        \"size\": 1,\r\n        \"title\": \"Score Heatmap — Project × Evaluator\",\r\n        \"timeContext\": { \"durationMs\": 0 },\r\n        \"timeContextFromParameter\": \"TimeRange\",\r\n        \"queryType\": 0,\r\n        \"resourceType\": \"microsoft.operationalinsights/workspaces\",\r\n        \"visualization\": \"table\",\r\n        \"gridSettings\": {\r\n          \"formatters\": [\r\n            {\r\n              \"columnMatch\": \"^(?!FoundryProjectName_s).*\",\r\n              \"formatter\": 8,\r\n              \"formatOptions\": { \"min\": 0, \"max\": 1, \"palette\": \"redGreen\" }\r\n            }\r\n          ],\r\n          \"rowLimit\": 50,\r\n          \"filter\": true\r\n        }\r\n      },\r\n      \"name\": \"chart-heatmap\"\r\n    },\r\n\r\n    {\r\n      \"type\": 1,\r\n      \"content\": { \"json\": \"## ⚠️ Failures\" },\r\n      \"name\": \"section-failures\"\r\n    },\r\n\r\n    {\r\n      \"type\": 3,\r\n      \"content\": {\r\n        \"version\": \"KqlItem/1.0\",\r\n        \"query\": \"FoundryEvals_CL\\n| where TimeGenerated {TimeRange}\\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\\n| where Passed_b != true\\n| project TimeGenerated, FoundryProjectName_s, TargetName_s, TargetType_s, EvaluatorName_s, Score_d, Threshold_d, Severity_s, ErrorMessage_s\\n| order by TimeGenerated desc\",\r\n        \"size\": 0,\r\n        \"title\": \"Failed Eval Checks\",\r\n        \"noDataMessage\": \"✅ No failures in the selected time range.\",\r\n        \"timeContext\": { \"durationMs\": 0 },\r\n        \"timeContextFromParameter\": \"TimeRange\",\r\n        \"queryType\": 0,\r\n        \"resourceType\": \"microsoft.operationalinsights/workspaces\",\r\n        \"visualization\": \"table\",\r\n        \"gridSettings\": {\r\n          \"formatters\": [\r\n            {\r\n              \"columnMatch\": \"Score_d\",\r\n              \"formatter\": 8,\r\n              \"formatOptions\": { \"min\": 0, \"max\": 1, \"palette\": \"redGreen\" }\r\n            },\r\n            {\r\n              \"columnMatch\": \"Severity_s\",\r\n              \"formatter\": 18,\r\n              \"formatOptions\": {\r\n                \"thresholdsOptions\": \"icons\",\r\n                \"thresholdsGrid\": [\r\n                  { \"operator\": \"==\", \"thresholdValue\": \"info\",     \"representation\": \"success\", \"text\": \"{0}{1}\" },\r\n                  { \"operator\": \"==\", \"thresholdValue\": \"warning\",  \"representation\": \"2\",       \"text\": \"{0}{1}\" },\r\n                  { \"operator\": \"==\", \"thresholdValue\": \"critical\",  \"representation\": \"4\",       \"text\": \"{0}{1}\" }\r\n                ]\r\n              }\r\n            }\r\n          ],\r\n          \"filter\": true\r\n        }\r\n      },\r\n      \"name\": \"failures-table\"\r\n    },\r\n\r\n    {\r\n      \"type\": 1,\r\n      \"content\": { \"json\": \"## 🗃️ All Results\" },\r\n      \"name\": \"section-all\"\r\n    },\r\n\r\n    {\r\n      \"type\": 3,\r\n      \"content\": {\r\n        \"version\": \"KqlItem/1.0\",\r\n        \"query\": \"FoundryEvals_CL\\n| where TimeGenerated {TimeRange}\\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\\n| project\\n    TimeGenerated,\\n    Project = FoundryProjectName_s,\\n    Target = TargetName_s,\\n    Type = TargetType_s,\\n    Evaluator = EvaluatorName_s,\\n    Category = EvaluatorCategory_s,\\n    Score = Score_d,\\n    Threshold = Threshold_d,\\n    Passed = Passed_b,\\n    Severity = Severity_s,\\n    ['Duration (ms)'] = DurationMs_d,\\n    RunId = EvalRunId_s\\n| order by TimeGenerated desc\",\r\n        \"size\": 1,\r\n        \"title\": \"All Eval Results\",\r\n        \"timeContext\": { \"durationMs\": 0 },\r\n        \"timeContextFromParameter\": \"TimeRange\",\r\n        \"queryType\": 0,\r\n        \"resourceType\": \"microsoft.operationalinsights/workspaces\",\r\n        \"visualization\": \"table\",\r\n        \"gridSettings\": {\r\n          \"formatters\": [\r\n            {\r\n              \"columnMatch\": \"Score\",\r\n              \"formatter\": 8,\r\n              \"formatOptions\": { \"min\": 0, \"max\": 1, \"palette\": \"redGreen\" }\r\n            },\r\n            {\r\n              \"columnMatch\": \"Passed\",\r\n              \"formatter\": 18,\r\n              \"formatOptions\": {\r\n                \"thresholdsOptions\": \"icons\",\r\n                \"thresholdsGrid\": [\r\n                  { \"operator\": \"==\", \"thresholdValue\": \"True\",    \"representation\": \"success\", \"text\": \"Pass\" },\r\n                  { \"operator\": \"Default\",                          \"representation\": \"error\",   \"text\": \"FAIL\" }\r\n                ]\r\n              }\r\n            },\r\n            {\r\n              \"columnMatch\": \"Severity\",\r\n              \"formatter\": 18,\r\n              \"formatOptions\": {\r\n                \"thresholdsOptions\": \"icons\",\r\n                \"thresholdsGrid\": [\r\n                  { \"operator\": \"==\", \"thresholdValue\": \"info\",     \"representation\": \"success\", \"text\": \"{0}{1}\" },\r\n                  { \"operator\": \"==\", \"thresholdValue\": \"warning\",  \"representation\": \"2\",       \"text\": \"{0}{1}\" },\r\n                  { \"operator\": \"==\", \"thresholdValue\": \"critical\",  \"representation\": \"4\",       \"text\": \"{0}{1}\" }\r\n                ]\r\n              }\r\n            }\r\n          ],\r\n          \"rowLimit\": 500,\r\n          \"filter\": true\r\n        }\r\n      },\r\n      \"name\": \"all-results-grid\"\r\n    },\r\n\r\n    {\r\n      \"type\": 1,\r\n      \"content\": { \"json\": \"## 🎯 Target Drill-Down\" },\r\n      \"name\": \"section-target\"\r\n    },\r\n\r\n    {\r\n      \"type\": 3,\r\n      \"content\": {\r\n        \"version\": \"KqlItem/1.0\",\r\n        \"query\": \"FoundryEvals_CL\\n| where TimeGenerated {TimeRange}\\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\\n| summarize AvgScore = round(avg(Score_d), 3) by TargetName_s, EvaluatorName_s\\n| evaluate pivot(EvaluatorName_s, max(AvgScore))\\n| order by TargetName_s asc\",\r\n        \"size\": 1,\r\n        \"title\": \"Score Heatmap — Target × Evaluator\",\r\n        \"timeContext\": { \"durationMs\": 0 },\r\n        \"timeContextFromParameter\": \"TimeRange\",\r\n        \"queryType\": 0,\r\n        \"resourceType\": \"microsoft.operationalinsights/workspaces\",\r\n        \"visualization\": \"table\",\r\n        \"gridSettings\": {\r\n          \"formatters\": [\r\n            {\r\n              \"columnMatch\": \"^(?!TargetName_s).*\",\r\n              \"formatter\": 8,\r\n              \"formatOptions\": { \"min\": 0, \"max\": 1, \"palette\": \"redGreen\" }\r\n            }\r\n          ],\r\n          \"rowLimit\": 100,\r\n          \"filter\": true\r\n        }\r\n      },\r\n      \"name\": \"target-heatmap\"\r\n    },\r\n\r\n    {\r\n      \"type\": 3,\r\n      \"content\": {\r\n        \"version\": \"KqlItem/1.0\",\r\n        \"query\": \"FoundryEvals_CL\\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\\n| summarize Checks=count(), Passed=countif(Passed_b == true), Failed=countif(Passed_b != true), LastRun=max(TimeGenerated), Project=any(FoundryProjectName_s), Type=any(TargetType_s) by TargetName_s, EvalRunId_s\\n| summarize arg_max(LastRun, *) by TargetName_s\\n| extend ['Pass Rate %']=round(100.0 * Passed / Checks, 1)\\n| project LastRun, Project, Target=TargetName_s, Type, Checks, Passed, Failed, ['Pass Rate %']\\n| order by ['Pass Rate %'] asc\",\r\n        \"size\": 1,\r\n        \"title\": \"Latest Run — Status per Target\",\r\n        \"queryType\": 0,\r\n        \"resourceType\": \"microsoft.operationalinsights/workspaces\",\r\n        \"visualization\": \"table\",\r\n        \"gridSettings\": {\r\n          \"formatters\": [\r\n            {\r\n              \"columnMatch\": \"Pass Rate %\",\r\n              \"formatter\": 8,\r\n              \"formatOptions\": { \"min\": 0, \"max\": 100, \"palette\": \"redGreen\" }\r\n            },\r\n            {\r\n              \"columnMatch\": \"Failed\",\r\n              \"formatter\": 18,\r\n              \"formatOptions\": {\r\n                \"thresholdsOptions\": \"colors\",\r\n                \"thresholdsGrid\": [\r\n                  { \"operator\": \">\", \"thresholdValue\": \"0\", \"representation\": \"redBright\", \"text\": \"{0}{1}\" },\r\n                  { \"operator\": \"Default\", \"representation\": \"green\", \"text\": \"{0}{1}\" }\r\n                ]\r\n              }\r\n            }\r\n          ],\r\n          \"rowLimit\": 100,\r\n          \"filter\": true\r\n        }\r\n      },\r\n      \"customWidth\": \"50\",\r\n      \"name\": \"latest-run-table\"\r\n    },\r\n\r\n    {\r\n      \"type\": 3,\r\n      \"content\": {\r\n        \"version\": \"KqlItem/1.0\",\r\n        \"query\": \"let current = FoundryEvals_CL\\n| where TimeGenerated >= ago(7d)\\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\\n| summarize CurrentPassRate = round(100.0 * countif(Passed_b == true) / count(), 1) by TargetName_s;\\nlet prior = FoundryEvals_CL\\n| where TimeGenerated between(ago(14d)..ago(7d))\\n| where 'value::all' in ({Project}) or FoundryProjectName_s in ({Project})\\n| where 'value::all' in ({TargetType}) or TargetType_s in ({TargetType})\\n| where 'value::all' in ({Target}) or TargetName_s in ({Target})\\n| summarize PriorPassRate = round(100.0 * countif(Passed_b == true) / count(), 1) by TargetName_s;\\ncurrent\\n| join kind=leftouter prior on TargetName_s\\n| project Target=TargetName_s, ['This Week %']=CurrentPassRate, ['Prior Week %']=PriorPassRate, ['Change %']=round(CurrentPassRate - PriorPassRate, 1)\\n| order by ['Change %'] asc\",\r\n        \"size\": 1,\r\n        \"title\": \"Week-over-Week Regression\",\r\n        \"queryType\": 0,\r\n        \"resourceType\": \"microsoft.operationalinsights/workspaces\",\r\n        \"visualization\": \"table\",\r\n        \"gridSettings\": {\r\n          \"formatters\": [\r\n            {\r\n              \"columnMatch\": \"This Week %|Prior Week %\",\r\n              \"formatter\": 8,\r\n              \"formatOptions\": { \"min\": 0, \"max\": 100, \"palette\": \"redGreen\" }\r\n            },\r\n            {\r\n              \"columnMatch\": \"Change %\",\r\n              \"formatter\": 8,\r\n              \"formatOptions\": { \"min\": -20, \"max\": 20, \"palette\": \"redGreen\" }\r\n            }\r\n          ],\r\n          \"rowLimit\": 100,\r\n          \"filter\": true\r\n        }\r\n      },\r\n      \"customWidth\": \"50\",\r\n      \"name\": \"regression-table\"\r\n    }\r\n  ]\r\n}\r\n"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Insights/workbooks",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(resourceGroup().id, parameters('workbookName'))]",
+              "location": "[parameters('location')]",
+              "tags": "[union(parameters('tags'), createObject('hidden-title', parameters('workbookDisplayName'), 'workbook-content-version', parameters('contentVersion')))]",
+              "kind": "shared",
+              "properties": {
+                "displayName": "[parameters('workbookDisplayName')]",
+                "serializedData": "[variables('$fxv#0')]",
+                "version": "[parameters('contentVersion')]",
+                "category": "workbook",
+                "sourceId": "[parameters('logAnalyticsWorkspaceId')]"
+              }
+            }
+          ],
+          "outputs": {
+            "workbookId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Insights/workbooks', guid(resourceGroup().id, parameters('workbookName')))]"
+            },
+            "workbookName": {
+              "type": "string",
+              "value": "[guid(resourceGroup().id, parameters('workbookName'))]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'monitoring')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "rbac",
+      "location": "[deployment().location]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "functionAppPrincipalId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'functionApp'), '2025-04-01').outputs.functionAppPrincipalId.value]"
+          },
+          "principalId": {
+            "value": "[parameters('principalId')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "16008038291733490551"
+            }
+          },
+          "parameters": {
+            "functionAppPrincipalId": {
+              "type": "string"
+            },
+            "principalId": {
+              "type": "string"
+            }
+          },
+          "variables": {
+            "readerRoleId": "acdd72a7-3385-48ef-bd42-f606fba81ae7",
+            "azureAiDeveloperRoleId": "64702f94-c441-49e6-a78b-ef80e0188fee"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(subscription().id, parameters('functionAppPrincipalId'), variables('readerRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('readerRoleId'))]",
+                "principalId": "[parameters('functionAppPrincipalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(subscription().id, parameters('functionAppPrincipalId'), variables('azureAiDeveloperRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('azureAiDeveloperRoleId'))]",
+                "principalId": "[parameters('functionAppPrincipalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "condition": "[not(empty(parameters('principalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(subscription().id, parameters('principalId'), variables('readerRoleId'), 'deployer')]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('readerRoleId'))]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "User"
+              }
+            },
+            {
+              "condition": "[not(empty(parameters('principalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(subscription().id, parameters('principalId'), variables('azureAiDeveloperRoleId'), 'deployer')]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('azureAiDeveloperRoleId'))]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "User"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'functionApp')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "rbac-rg",
+      "resourceGroup": "[format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "functionAppPrincipalId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'functionApp'), '2025-04-01').outputs.functionAppPrincipalId.value]"
+          },
+          "logAnalyticsWorkspaceResourceId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.logAnalyticsWorkspaceId.value]"
+          },
+          "dataCollectionRuleResourceId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'dataCollection'), '2025-04-01').outputs.dataCollectionRuleId.value]"
+          },
+          "storageAccountName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.storageAccountName.value]"
+          },
+          "aiServicesAccountName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'foundry'), '2025-04-01').outputs.aiServicesAccountName.value]"
+          },
+          "principalId": {
+            "value": "[parameters('principalId')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "11770604878637926369"
+            }
+          },
+          "parameters": {
+            "functionAppPrincipalId": {
+              "type": "string"
+            },
+            "logAnalyticsWorkspaceResourceId": {
+              "type": "string"
+            },
+            "dataCollectionRuleResourceId": {
+              "type": "string"
+            },
+            "storageAccountName": {
+              "type": "string"
+            },
+            "aiServicesAccountName": {
+              "type": "string"
+            },
+            "principalId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Principal ID of the user running azd provision (for local testing RBAC)"
+              }
+            }
+          },
+          "variables": {
+            "monitoringMetricsPublisherRoleId": "3913510d-42f4-4e42-8a64-420c390055eb",
+            "monitoringContributorRoleId": "749f88d5-cbae-40b8-bcfc-e573ddc772fa",
+            "storageBlobDataOwnerRoleId": "b7e6dc6d-f1e8-4753-8033-0f276bb0955b",
+            "storageBlobDataContributorRoleId": "ba92f5b4-2d11-453d-a403-e96b0029c9fe",
+            "storageQueueDataContributorRoleId": "974c5e8b-45b9-4653-ba55-5f855dd0fb88",
+            "storageTableDataContributorRoleId": "0a9a7e1f-b9d0-4cc4-a60d-0319b160aaa3",
+            "cognitiveServicesOpenAiUserRoleId": "5e0bd9bd-7b93-4f28-af87-19fc36ad61bd",
+            "azureAiDeveloperRoleId": "64702f94-c441-49e6-a78b-ef80e0188fee"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(resourceGroup().id, parameters('functionAppPrincipalId'), variables('monitoringMetricsPublisherRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('monitoringMetricsPublisherRoleId'))]",
+                "principalId": "[parameters('functionAppPrincipalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "name": "[guid(resourceGroup().id, parameters('functionAppPrincipalId'), variables('monitoringContributorRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('monitoringContributorRoleId'))]",
+                "principalId": "[parameters('functionAppPrincipalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[format('Microsoft.Storage/storageAccounts/{0}', parameters('storageAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), parameters('functionAppPrincipalId'), variables('storageBlobDataOwnerRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageBlobDataOwnerRoleId'))]",
+                "principalId": "[parameters('functionAppPrincipalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[format('Microsoft.Storage/storageAccounts/{0}', parameters('storageAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), parameters('functionAppPrincipalId'), variables('storageQueueDataContributorRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageQueueDataContributorRoleId'))]",
+                "principalId": "[parameters('functionAppPrincipalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[format('Microsoft.Storage/storageAccounts/{0}', parameters('storageAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), parameters('functionAppPrincipalId'), variables('storageTableDataContributorRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageTableDataContributorRoleId'))]",
+                "principalId": "[parameters('functionAppPrincipalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[format('Microsoft.CognitiveServices/accounts/{0}', parameters('aiServicesAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('aiServicesAccountName')), parameters('functionAppPrincipalId'), variables('cognitiveServicesOpenAiUserRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('cognitiveServicesOpenAiUserRoleId'))]",
+                "principalId": "[parameters('functionAppPrincipalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[format('Microsoft.CognitiveServices/accounts/{0}', parameters('aiServicesAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('aiServicesAccountName')), parameters('functionAppPrincipalId'), variables('azureAiDeveloperRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('azureAiDeveloperRoleId'))]",
+                "principalId": "[parameters('functionAppPrincipalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "condition": "[not(empty(parameters('principalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[format('Microsoft.CognitiveServices/accounts/{0}', parameters('aiServicesAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('aiServicesAccountName')), parameters('principalId'), variables('cognitiveServicesOpenAiUserRoleId'), 'deployer')]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('cognitiveServicesOpenAiUserRoleId'))]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "User"
+              }
+            },
+            {
+              "condition": "[not(empty(parameters('principalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[format('Microsoft.CognitiveServices/accounts/{0}', parameters('aiServicesAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('aiServicesAccountName')), parameters('principalId'), variables('azureAiDeveloperRoleId'), 'deployer')]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('azureAiDeveloperRoleId'))]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "User"
+              }
+            },
+            {
+              "condition": "[not(empty(parameters('principalId')))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[format('Microsoft.Storage/storageAccounts/{0}', parameters('storageAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), parameters('principalId'), variables('storageBlobDataContributorRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageBlobDataContributorRoleId'))]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "User"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'dataCollection')]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'foundry')]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'functionApp')]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'monitoring')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName')))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'storage')]"
+      ]
+    }
+  ],
+  "outputs": {
+    "AZURE_LOCATION": {
+      "type": "string",
+      "value": "[parameters('location')]"
+    },
+    "AZURE_TENANT_ID": {
+      "type": "string",
+      "value": "[tenant().tenantId]"
+    },
+    "AZURE_SUBSCRIPTION_ID": {
+      "type": "string",
+      "value": "[subscription().subscriptionId]"
+    },
+    "AZURE_RESOURCE_GROUP": {
+      "type": "string",
+      "value": "[format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))]"
+    },
+    "LOG_ANALYTICS_WORKSPACE_ID": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.logAnalyticsWorkspaceId.value]"
+    },
+    "DATA_COLLECTION_ENDPOINT_URI": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'dataCollection'), '2025-04-01').outputs.dataCollectionEndpointUri.value]"
+    },
+    "DATA_COLLECTION_RULE_IMMUTABLE_ID": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'dataCollection'), '2025-04-01').outputs.dataCollectionRuleImmutableId.value]"
+    },
+    "APPLICATIONINSIGHTS_CONNECTION_STRING": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.applicationInsightsConnectionString.value]"
+    },
+    "FUNCTION_APP_NAME": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'functionApp'), '2025-04-01').outputs.functionAppName.value]"
+    },
+    "AZURE_STORAGE_ACCOUNT": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.storageAccountName.value]"
+    },
+    "WORKBOOK_ID": {
+      "type": "string",
+      "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'workbook'), '2025-04-01').outputs.workbookId.value]"
+    },
+    "AZURE_OPENAI_ENDPOINT": {
+      "type": "string",
+      "value": "[if(not(empty(parameters('existingOpenAiEndpoint'))), parameters('existingOpenAiEndpoint'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'foundry'), '2025-04-01').outputs.aiServicesEndpoint.value)]"
+    },
+    "AZURE_OPENAI_DEPLOYMENT": {
+      "type": "string",
+      "value": "[if(not(empty(parameters('existingOpenAiDeployment'))), parameters('existingOpenAiDeployment'), reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, format('{0}{1}', variables('abbrs').resourcesResourceGroups, parameters('environmentName'))), 'Microsoft.Resources/deployments', 'foundry'), '2025-04-01').outputs.gptDeploymentName.value)]"
+    },
+    "AZURE_OPENAI_API_VERSION": {
+      "type": "string",
+      "value": "2024-08-01-preview"
+    }
+  }
+}

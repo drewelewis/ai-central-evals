@@ -1,0 +1,98 @@
+# =============================================================================
+# ai-central-evals  —  .gitignore
+# =============================================================================
+
+# ── Environment & secrets ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# ── Azure Developer CLI ───────────────────────────────────────────────────────
+.azure/
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.egg
+MANIFEST
+.eggs/
+
+# Test & coverage artifacts
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+.tox/
+.nox/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+.pyre/
+
+# Jupyter / notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# ── Azure Functions local runtime ─────────────────────────────────────────────
+local.settings.json
+bin/
+obj/
+
+# ── IDE & editor ─────────────────────────────────────────────────────────────
+.vscode/settings.json
+.vscode/launch.json
+.vscode/*.code-workspace
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+*.bak
+*~
+.DS_Store
+Thumbs.db
+
+# ── Logs & diagnostics ────────────────────────────────────────────────────────
+*.log
+*.log.*
+logs/
+
+# ── Eval artefacts & local test output ───────────────────────────────────────
+eval_results/
+eval_output/
+*.jsonl.out
+*.results.json
+
+# ── Terraform ─────────────────────────────────────────────────────────────────
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+*.zip
+*.tar.gz
+*.tmp

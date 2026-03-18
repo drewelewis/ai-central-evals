@@ -1,0 +1,24 @@
+# ---------------------------------------------------------------
+# ai-central-evals — Python Function App dependencies
+# ---------------------------------------------------------------
+
+# Azure Functions runtime
+azure-functions==1.21.3
+
+# Identity & auth (Managed Identity / DefaultAzureCredential)
+azure-identity==1.19.0
+
+# Azure Resource Graph — discover Foundry workspaces + deployments
+azure-mgmt-resourcegraph==8.0.0
+azure-mgmt-core==1.5.0
+
+# Azure AI Foundry — eval SDK + project client
+azure-ai-evaluation==1.16.0
+azure-ai-projects==1.0.0b11
+
+# Azure Monitor — Logs Ingestion API for FoundryEvals_CL
+azure-monitor-ingestion==1.0.4
+
+# Utilities
+python-dateutil==2.9.0
+python-dotenv>=1.0.0

@@ -1,0 +1,45 @@
+name: ai-central-evals
+
+metadata:
+  template: ai-central-evals@0.0.1
+
+services:
+  nightly-evals:
+    project: ./src/nightly_evals
+    language: py
+    host: function
+
+hooks:
+  preprovision:
+    windows:
+      shell: pwsh
+      run: az bicep build --file infra/main.bicep --outfile infra/main.json
+      continueOnError: false
+      interactive: false
+    posix:
+      shell: sh
+      run: az bicep build --file infra/main.bicep --outfile infra/main.json
+      continueOnError: false
+      interactive: false
+
+  postprovision:
+    windows:
+      shell: pwsh
+      run: |
+        Write-Host "Writing provisioned values to .env ..."
+        azd env get-values | Out-File -FilePath .env -Encoding utf8
+        Add-Content .env "`n# Local eval config (customize as needed)`nEVAL_SCORE_THRESHOLD=0.7`nEVAL_PACK_VERSION=1.0.0`nEVAL_ENABLE_QUALITY=true`nEVAL_ENABLE_SAFETY=true`nEVAL_ENABLE_SIMILARITY=true`nEVAL_DATASET_PATH="
+        Write-Host "Running deploy.ps1 to (re)build and upload the function package ..."
+        .\deploy.ps1
+      continueOnError: false
+      interactive: false
+    posix:
+      shell: sh
+      run: |
+        echo "Writing provisioned values to .env ..."
+        azd env get-values > .env
+        printf "\n# Local eval config (customize as needed)\nEVAL_SCORE_THRESHOLD=0.7\nEVAL_PACK_VERSION=1.0.0\nEVAL_ENABLE_QUALITY=true\nEVAL_ENABLE_SAFETY=true\nEVAL_ENABLE_SIMILARITY=true\nEVAL_DATASET_PATH=\n" >> .env
+        echo "Running deploy.sh to (re)build and upload the function package ..."
+        ./deploy.sh
+      continueOnError: false
+      interactive: false
