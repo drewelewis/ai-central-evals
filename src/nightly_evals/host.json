@@ -14,7 +14,7 @@
       "Host.Aggregator": "Trace"
     }
   },
-  "functionTimeout": "00:29:00",
+  "functionTimeout": "02:00:00",
   "extensions": {
     "queues": {
       "maxPollingInterval": "00:00:02",

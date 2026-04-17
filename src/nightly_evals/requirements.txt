@@ -12,6 +12,9 @@ azure-identity==1.19.0
 azure-mgmt-resourcegraph==8.0.0
 azure-mgmt-core==1.5.0
 
+# Cognitive Services Management — list model deployments
+azure-mgmt-cognitiveservices==13.5.0
+
 # Azure AI Foundry — eval SDK + project client
 azure-ai-evaluation==1.16.0
 azure-ai-projects==1.0.0b11

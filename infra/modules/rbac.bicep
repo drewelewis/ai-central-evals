@@ -14,6 +14,9 @@ var readerRoleId        = 'acdd72a7-3385-48ef-bd42-f606fba81ae7'
 // subscription — required to enumerate agents and run safety evaluators (Violence,
 // Hate, Sexual, SelfHarm, ProtectedMaterial) across every discovered Foundry project.
 var azureAiDeveloperRoleId = '64702f94-c441-49e6-a78b-ef80e0188fee'
+// Azure AI User: grants Microsoft.CognitiveServices/* which includes AIServices/agents/read
+// Required for enumerating Foundry Agents. Azure AI Developer doesn't include this.
+var azureAiUserRoleId = '53ca6127-db72-4b80-b1b0-d745d6d5456d'
 
 // ---- Subscription-level: Reader (for ARG queries) ----
 resource argReaderAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
@@ -32,6 +35,18 @@ resource funcAppAiDeveloperSub 'Microsoft.Authorization/roleAssignments@2022-04-
   name: guid(subscription().id, functionAppPrincipalId, azureAiDeveloperRoleId)
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', azureAiDeveloperRoleId)
+    principalId: functionAppPrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// ---- Subscription-level: Azure AI User (Function App MI) ----
+// Required for agents/read data action which Azure AI Developer doesn't include.
+// This grants Microsoft.CognitiveServices/* at subscription scope.
+resource funcAppAiUserSub 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(subscription().id, functionAppPrincipalId, azureAiUserRoleId)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', azureAiUserRoleId)
     principalId: functionAppPrincipalId
     principalType: 'ServicePrincipal'
   }

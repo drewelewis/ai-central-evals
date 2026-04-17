@@ -77,6 +77,10 @@ resource functionApp 'Microsoft.Web/sites@2023-01-01' = {
           value: subscriptionId
         }
         {
+          name: 'AZURE_RESOURCE_GROUP'
+          value: resourceGroup().name
+        }
+        {
           name: 'LOG_ANALYTICS_WORKSPACE_ID'
           value: logAnalyticsWorkspaceId
         }

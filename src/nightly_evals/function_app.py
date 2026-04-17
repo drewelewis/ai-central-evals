@@ -26,10 +26,10 @@ app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
 # ---- Nightly eval timer ----
 # NCRONTAB: second minute hour day month weekday
-# 0 0 2 * * *  → every day at 02:00:00 UTC
+# 0 */30 * * * *  → every 30 minutes
 @app.timer_trigger(
     arg_name="timer",
-    schedule="0 0 * * * *",
+    schedule="0 */30 * * * *",
     run_on_startup=False,          # set True in dev to trigger immediately after deploy
     use_monitor=True,
 )
@@ -45,6 +45,8 @@ def nightly_evals(timer: func.TimerRequest) -> None:
 
     subscription_id: str = os.environ["AZURE_SUBSCRIPTION_ID"]
     tenant_id: str = os.environ.get("AZURE_TENANT_ID", "")
+    # Note: AZURE_RESOURCE_GROUP is used for deployment, not for discovery filtering
+    # Discovery scans all resource groups in the subscription
     trigger_type: str = "scheduled"
     dataset_path: str = os.environ.get("EVAL_DATASET_PATH", "")
 
@@ -55,8 +57,8 @@ def nightly_evals(timer: func.TimerRequest) -> None:
     )
 
     try:
-        # ---- Step 1: Discover targets ----
-        targets = discover_all_eval_targets(subscription_id, tenant_id)
+        # ---- Step 1: Discover targets (all resource groups in subscription) ----
+        targets = discover_all_eval_targets(subscription_id, tenant_id, resource_group=None)
         logger.info("Discovered %d eval target(s)", len(targets))
 
         if not targets:
@@ -90,8 +92,10 @@ def nightly_evals(timer: func.TimerRequest) -> None:
 def run_evals_http(req: func.HttpRequest) -> func.HttpResponse:
     """
     On-demand eval trigger.  POST with optional JSON body:
-      { "target_name": "my-deployment", "trigger_type": "manual" }
-    Returns 200 with a JSON summary.
+      { "target_name": "my-deployment", "resource_group": "rg-name", "trigger_type": "manual", "max_targets": 10 }
+    
+    For full subscription scans, use the timer trigger (runs every 30 minutes).
+    HTTP trigger is limited to max_targets (default 10) to avoid gateway timeouts.
     """
     import json
 
@@ -103,13 +107,18 @@ def run_evals_http(req: func.HttpRequest) -> func.HttpResponse:
 
     subscription_id: str = os.environ["AZURE_SUBSCRIPTION_ID"]
     tenant_id: str = os.environ.get("AZURE_TENANT_ID", "")
+    resource_group: str | None = body.get("resource_group") or None
     trigger_type: str = body.get("trigger_type", "manual")
     dataset_path: str = body.get("dataset_path", os.environ.get("EVAL_DATASET_PATH", ""))
     filter_name: str = body.get("target_name", "")
+    max_targets: int = int(body.get("max_targets", 10))  # Limit to avoid gateway timeout
 
-    targets = discover_all_eval_targets(subscription_id, tenant_id)
+    targets = discover_all_eval_targets(subscription_id, tenant_id, resource_group)
     if filter_name:
         targets = [t for t in targets if t.target_name == filter_name]
+    
+    total_discovered = len(targets)
+    targets = targets[:max_targets]  # Limit targets for HTTP trigger
 
     run_results = []
     for target in targets:
@@ -124,6 +133,8 @@ def run_evals_http(req: func.HttpRequest) -> func.HttpResponse:
 
     summary = {
         "targets_evaluated": len(run_results),
+        "total_discovered": total_discovered,
+        "limited_to": max_targets,
         "rows_uploaded": uploaded,
         "run_ids": [r.run_id for r in run_results],
         "failures": [
@@ -131,6 +142,7 @@ def run_evals_http(req: func.HttpRequest) -> func.HttpResponse:
             for r in run_results
             if r.error_message
         ],
+        "note": f"HTTP trigger limited to {max_targets} targets. Use timer trigger for full subscription scan."
     }
     return func.HttpResponse(
         body=json.dumps(summary),

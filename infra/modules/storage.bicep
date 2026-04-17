@@ -18,7 +18,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
     minimumTlsVersion: 'TLS1_2'
     allowBlobPublicAccess: false
     allowSharedKeyAccess: false  // MI-only access — no shared keys, no SAS tokens; Entra ID + RBAC required
-    publicNetworkAccess: 'Enabled'
+    publicNetworkAccess: 'Enabled'   // Explicit: local deploy.ps1 requires public data-plane access (2024-04-17 state drift fix)
     supportsHttpsTrafficOnly: true
     networkAcls: {
       defaultAction: 'Allow'    // Public data-plane access allowed; security relies on allowSharedKeyAccess=false + RBAC
